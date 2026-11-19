@@ -54,10 +54,12 @@
   .rows div { display:flex; justify-content:space-between; padding:3px 0; border-bottom:1px dashed #444; }
   .btns { display:flex; gap:8px; justify-content:center; margin-top:12px; flex-wrap:wrap; }
   .lv { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px; }
+  .card p.note { font-size:10px; line-height:1.4; opacity:.55; margin:10px 0 0; }
   .lv button:last-child:nth-child(odd) { grid-column:span 2; }
   button.b { font:inherit; font-weight:800; font-size:15px; padding:11px 14px; min-height:44px; border-radius:10px; border:0; cursor:pointer;
     background:var(--accent); color:#222; }
   button.b.sec { background:#3a3d46; color:#fff; }
+  button.b.x { background:#000; color:#fff; border:1px solid #555; flex-basis:100%; }
   button.b small { display:block; font-size:11px; font-weight:600; opacity:.8; }
   button.b:disabled { opacity:.35; cursor:default; }
   #msg.pop { animation:pop .5s cubic-bezier(.2,1.6,.4,1); }
@@ -352,6 +354,8 @@ document.addEventListener('click', e => { if (e.target.closest('button.b')) SFX.
 // ---------- game ----------
 let state = 'title', levelIdx = 0, world, car, acc = 0, particles = [], skids = [], prevRear = null, primaryAction = null, shake = 0;
 let simT = 0;
+let play = null;            // 今回の挑戦の記録（集計の送信用）
+const tries = {};           // レベルごとの、ページを開いてからの挑戦回数
 // QA用：URLに ?qa を付けたときだけ、ゲームの状態を読めるようにする
 if (/[?&]qa\b/.test(location.search)) window.__dp = { get car() { return car; }, get state() { return state; }, get simT() { return simT; }, get timeScale() { return timeScale; } };
 let floats = [], confetti = [], timeScale = 1, zoom = 1, countT = 0, countN = 0, wasDrifting = false, hitStop = 0, driftPeak = 0;
@@ -366,6 +370,8 @@ function startLevel(i) {
   particles = []; skids = []; prevRear = null; acc = 0; floats = []; confetti = [];
   timeScale = 1; zoom = 1; wasDrifting = false; hitStop = 0; driftPeak = 0;
   state = 'count'; countT = 0; countN = 3;
+  tries[i] = (tries[i] || 0) + 1;
+  play = { s0: -1, hold: 0, try: tries[i] };
   hidePanel();
   flash('3', 900); SFX.beep();
 }
@@ -408,6 +414,7 @@ function update(dt) {
     acc -= DT;
     simT += DT;
     car.bumpNow = false;
+    if (input.drift && car.v > 40) { if (play.s0 < 0) play.s0 = car.s; play.hold += DT; }
     const r = CORE.step(car, world, input.drift, input.brake, DT);
     if (car.bumpNow && car.v > 30) { shake = Math.max(shake, 4); SFX.bump(); vib(30); floats.push({ s: car.s, d: car.d + 30, text: 'ゴツッ', col: '#ff8a4f', life: 1 }); }
     effects();
@@ -454,11 +461,13 @@ function onCrash() {
   for (let i = 0; i < 10; i++) particles.push({ s: car.s, d: car.d, vs: (Math.random() - .5) * 60, vd: (Math.random() - .5) * 60, r: 10, life: 1.4 });
   floats.push({ s: car.s, d: car.d - 40, text: 'CRASH!', col: '#ff5a4f', life: 1.4, big: true });
   car.v = 0; timeScale = 1;
+  sendPlay('crash');
   setTimeout(() => { SFX.fail(); showFail('ガシャーン！', '駐車中の車にぶつかった…<br>ドリフトを始めるタイミングを変えてみよう'); }, 800);
 }
 function onStop() {
   state = 'over';
   const r = CORE.score(car, world);
+  sendPlay(r.ok ? 'park' : 'miss', r);
   if (!r.ok) {
     const early = car.s < world.slot.a;
     return setTimeout(() => { SFX.fail(); showFail('駐車失敗', early ? '手前で止まっちゃった。<br>ブレーキをもう少し遅く！' : (car.s > world.slot.b ? '行き過ぎ！ブレーキを早めに。' : '枠まで寄せきれなかった。<br>ドリフトを長めに押してみよう')); }, 300);
@@ -472,6 +481,53 @@ function onStop() {
   if (isBest) { best[key] = r.total; saveBest(); }
   setTimeout(() => showResult(r, isBest), 900);
 }
+// ---------- 結果の送信（Supabase の driftpark_plays / driftpark_shares。管理画面 ../drift-park-admin/ で集計する） ----------
+// url と公開用のキー（publishable / anon）は、ページに書いて公開する前提の値。
+// このキーでできるのは「決まった形の行を追加する」ことだけ（読むことはできない）。値の範囲はデータベースの制約で確かめている。
+// URL に ?nolog / ?qa があるとき、また localhost などで開いたとき（開発中のテスト）は送らない。ローカルで送信を試すときは ?log を付ける
+const SUPABASE = { url: 'https://ntdqbmhzeichgjkvranq.supabase.co', key: 'sb_publishable_HkWB6TIn2IwNogtDb_KysA_qlzI5Hua' };
+const IS_LOCAL = /^(localhost|127\.0\.0\.1|\[::1\]|)$|\.(localhost|test)$/.test(location.hostname);
+const LOG_ON = !!(SUPABASE.url && SUPABASE.key) && !/[?&](nolog|qa)\b/.test(location.search) && (!IS_LOCAL || /[?&]log\b/.test(location.search));
+function sbInsert(table, row) {
+  if (!LOG_ON) return;
+  try {
+    fetch(`${SUPABASE.url}/rest/v1/${table}`, {
+      method: 'POST', keepalive: true,
+      headers: { apikey: SUPABASE.key, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify(row),
+    }).then(res => { if (!res.ok) console.warn('結果を送れませんでした', res.status); }).catch(e => console.warn('結果を送れませんでした', e));
+  } catch (e) {}
+}
+// 端末ごとの匿名の番号（何人が遊んだかを数えるため）
+function playerId() {
+  try {
+    let id = localStorage.getItem('driftpark2_pid');
+    if (!id || !/^[A-Za-z0-9]{12}$/.test(id)) {
+      const cs = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789', b = crypto.getRandomValues(new Uint8Array(12));
+      id = Array.from(b, x => cs[x % cs.length]).join(''); localStorage.setItem('driftpark2_pid', id);
+    }
+    return id;
+  } catch (e) { return 'unknown00000'; }
+}
+function sendPlay(result, r) {
+  if (!LOG_ON || !play) return;
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const d = {
+    pid: playerId(), lv: levelIdx, result,                       // result: park（駐車できた）/ crash（ぶつかった）/ miss（枠の外で止まった）
+    score: r && r.ok ? r.total : -1, rank: r && r.ok ? r.rank : '',
+    s0: play.s0 < 0 ? -1 : Math.round(clamp(play.s0, 0, 3000)),  // ドリフトを始めた位置（押さなかったら -1）
+    hold: Math.round(clamp(play.hold, 0, 30) * 100) / 100,       // ドリフトを押していた時間（秒）
+    stop_s: Math.round(clamp(car.s, -1000, 5000)),                 // 止まった・ぶつかった位置（枠の中心は 760）
+    slip: Math.round(clamp(car.maxSlip, 0, 90)), bumped: !!car.bumped, attempt: clamp(play.try, 1, 999),
+  };
+  play = null;
+  sbInsert('driftpark_plays', d);
+}
+function sendShare(lvIdx, r) {
+  if (!LOG_ON) return;
+  sbInsert('driftpark_shares', { pid: playerId(), lv: lvIdx, score: r.total, rank: r.rank });
+}
+
 function spawnConfetti(n) {
   const cols = ['#ffcc33', '#ff5a4f', '#4fc3ff', '#7dff8a', '#ff8adf', '#fff'];
   for (let i = 0; i < n; i++) confetti.push({
@@ -496,7 +552,8 @@ function showTitle() {
   showPanel(`<h1>ドリフト縦列駐車</h1>
     <p class="lead">ドリフトで車を制御せよ！2つのボタンで黄色い枠に縦列駐車！</p>
     <div class="how">① 枠が近づいたら<b class="d">ドリフト</b>を長押し → 車が右へ滑る<br>② 離したらすぐ<b class="b">ブレーキ</b>を長押し<br>③ 枠の中で止まれば成功！</div>
-    <div class="lv">${lvs}</div>`, () => startLevel(nextPlayable()));
+    <div class="lv">${lvs}</div>
+    ${LOG_ON ? '<p class="note">遊んだ結果（レベル・点数・操作のタイミング）は、遊ばれ方の集計のために送信されます。</p>' : ''}`, () => startLevel(nextPlayable()));
   card.querySelectorAll('[data-lv]').forEach(b => b.onclick = () => startLevel(+b.dataset.lv));
   fitLead();
 }
@@ -516,6 +573,15 @@ function showFail(title, sub) {
   document.getElementById('pRetry').onclick = () => startLevel(levelIdx);
   document.getElementById('pMenu').onclick = showTitle;
 }
+// X の投稿画面を開く（スマホは X のアプリが入っていればアプリで開く）
+const GAME_URL = 'https://n0tya.github.io/drift-park/';
+function shareX(lvIdx, r) {
+  const lv = LEVELS[lvIdx];
+  const text = `ドリフト縦列駐車 LV${lvIdx + 1}「${lv.name}」で ${r.rank}ランク ${r.total}点！🚗💨\n#ドリフト縦列駐車`;
+  const url = 'https://x.com/intent/post?text=' + encodeURIComponent(text) + '&url=' + encodeURIComponent(GAME_URL);
+  window.open(url, '_blank', 'noopener');
+  sendShare(lvIdx, r);
+}
 function showResult(r, isBest) {
   const hasNext = levelIdx < LEVELS.length - 1;
   showPanel(`<h2>駐車成功！${isBest ? ' <span style="color:var(--accent);font-size:15px">NEW BEST</span>' : ''}</h2>
@@ -529,9 +595,11 @@ function showResult(r, isBest) {
       ${r.fullyIn ? '' : '<div style="color:var(--danger)"><span>枠からはみ出し</span><b>×0.6</b></div>'}
     </div>
     <div class="btns">${hasNext ? '<button class="b" id="pNext">次のレベル</button>' : ''}
-      <button class="b ${hasNext ? 'sec' : ''}" id="pRetry">もう一回</button><button class="b sec" id="pMenu">レベル選択</button></div>`,
+      <button class="b ${hasNext ? 'sec' : ''}" id="pRetry">もう一回</button><button class="b sec" id="pMenu">レベル選択</button>
+      <button class="b x" id="pShare">𝕏 で結果をポスト</button></div>`,
     () => hasNext ? startLevel(levelIdx + 1) : startLevel(levelIdx));
   if (hasNext) document.getElementById('pNext').onclick = () => startLevel(levelIdx + 1);
+  document.getElementById('pShare').onclick = () => shareX(levelIdx, r);
   document.getElementById('pRetry').onclick = () => startLevel(levelIdx);
   document.getElementById('pMenu').onclick = showTitle;
   // 内訳を順に表示 → 点数カウントアップ → ランクのハンコ
