@@ -1,0 +1,711 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#14161b">
+<title>ドリフト縦列駐車</title>
+<meta name="description" content="ドリフトで車を制御せよ！自動で走る車を「ドリフト」「ブレーキ」の2つのボタンで操って、路肩の黄色い枠にピタッと縦列駐車するスマホ向けゲーム。全5レベル、ランク採点つき。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://n0tya.github.io/drift-park/">
+<meta property="og:title" content="ドリフト縦列駐車">
+<meta property="og:description" content="ドリフトで車を制御せよ！2つのボタンで黄色い枠に縦列駐車。">
+<meta property="og:site_name" content="INDIE SHORTS">
+<meta property="og:image" content="https://n0tya.github.io/drift-park/ogp.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="ドリフト縦列駐車">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<style>
+  :root { --bg:#14161b; --panel:rgba(20,22,28,.94); --fg:#f2f2f2; --accent:#ffcc33; --danger:#ff5a4f; --btnH:116px; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--fg);
+    font-family:system-ui,"Hiragino Sans","Yu Gothic UI",sans-serif; overflow:hidden; user-select:none; -webkit-user-select:none; touch-action:none; }
+  #game { position:fixed; top:0; left:0; right:0; bottom:var(--btnH); display:flex; justify-content:center; }
+  canvas { display:block; }
+  #hud { position:fixed; top:calc(8px + env(safe-area-inset-top)); left:0; right:0; display:flex; justify-content:center; gap:14px;
+    font-weight:800; font-size:14px; text-shadow:0 1px 3px #000; pointer-events:none; }
+  #msg { position:fixed; top:38%; left:0; right:0; text-align:center; font-size:28px; font-weight:900; color:var(--accent);
+    text-shadow:0 2px 6px #000; pointer-events:none; opacity:0; transition:opacity .2s; }
+  #ctrl { position:fixed; left:0; right:0; bottom:0; height:var(--btnH); display:flex; gap:12px; justify-content:center;
+    padding:12px 12px calc(12px + env(safe-area-inset-bottom)); background:#0d0e12; }
+  .cb { flex:1; max-width:220px; border-radius:18px; border:0; font:inherit; font-weight:900; font-size:20px; color:#fff;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; cursor:pointer; touch-action:none; }
+  .cb small { font-size:11px; font-weight:600; opacity:.75; }
+  #bDrift { background:linear-gradient(#ff7a3d,#d9481c); box-shadow:0 5px 0 #8f2c0d; }
+  #bBrake { background:linear-gradient(#4b7bd8,#2c58b0); box-shadow:0 5px 0 #1a3670; }
+  .cb.on { transform:translateY(4px); box-shadow:0 1px 0 #000 !important; filter:brightness(1.15); }
+  #panel { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,.5); padding:16px; }
+  #panel.hide { display:none; }
+  .card { background:var(--panel); border:1px solid #333; border-radius:16px; padding:20px 20px; width:min(380px,100%);
+    text-align:center; box-shadow:0 10px 40px rgba(0,0,0,.5); max-height:100%; overflow:auto; }
+  .card h1 { margin:0 0 8px; font-size:26px; color:var(--accent); }
+  .card h2 { margin:0 0 8px; font-size:22px; }
+  .card p { margin:6px 0; font-size:14px; line-height:1.6; opacity:.92; }
+  .card p.lead { white-space:nowrap; letter-spacing:-.03em; margin-left:-8px; margin-right:-8px; }
+  .how { text-align:left; font-size:14px; line-height:1.7; background:#1f2229; border-radius:10px; padding:10px 14px; margin:10px 0; }
+  .how b.d { color:#ff8a4f; } .how b.b { color:#7fa6ff; }
+  .rank { font-size:60px; font-weight:900; line-height:1; margin:4px 0; color:var(--accent); }
+  .rows { text-align:left; font-size:14px; margin:10px auto; }
+  .rows div { display:flex; justify-content:space-between; padding:3px 0; border-bottom:1px dashed #444; }
+  .btns { display:flex; gap:8px; justify-content:center; margin-top:12px; flex-wrap:wrap; }
+  .lv { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px; }
+  .lv button:last-child:nth-child(odd) { grid-column:span 2; }
+  button.b { font:inherit; font-weight:800; font-size:15px; padding:11px 14px; min-height:44px; border-radius:10px; border:0; cursor:pointer;
+    background:var(--accent); color:#222; }
+  button.b.sec { background:#3a3d46; color:#fff; }
+  button.b small { display:block; font-size:11px; font-weight:600; opacity:.8; }
+  button.b:disabled { opacity:.35; cursor:default; }
+  #msg.pop { animation:pop .5s cubic-bezier(.2,1.6,.4,1); }
+  @keyframes pop { from { transform:scale(2.4); opacity:0; } to { transform:scale(1); opacity:1; } }
+  #flash { position:fixed; inset:0; pointer-events:none; opacity:0; }
+  #flash.go { animation:flash .45s ease-out; }
+  @keyframes flash { from { opacity:.75; } to { opacity:0; } }
+  .rank.stamp { animation:stamp .55s cubic-bezier(.2,1.5,.4,1) both; }
+  @keyframes stamp { 0% { transform:scale(3.5) rotate(-18deg); opacity:0; } 60% { opacity:1; } 100% { transform:scale(1) rotate(-6deg); } }
+  .card.in { animation:cardIn .35s ease-out; }
+  @keyframes cardIn { from { transform:translateY(24px) scale(.96); opacity:0; } to { transform:none; opacity:1; } }
+  .rows div { opacity:0; animation:rowIn .3s ease-out forwards; }
+  @keyframes rowIn { from { transform:translateX(-12px); opacity:0; } to { transform:none; opacity:1; } }
+  #mute { position:fixed; top:calc(4px + env(safe-area-inset-top)); right:8px; width:40px; height:40px; border-radius:50%;
+    border:0; background:rgba(0,0,0,.4); color:#fff; font-size:18px; cursor:pointer; z-index:5; }
+</style>
+</head>
+<body>
+<div id="game"><canvas id="c"></canvas></div>
+<div id="hud"><span id="hLevel"></span><span id="hSpeed"></span></div>
+<div id="msg"></div>
+<div id="flash"></div>
+<button id="mute" aria-label="サウンド切替">🔊</button>
+<div id="ctrl">
+  <button class="cb" id="bDrift">ドリフト<small>長押し</small></button>
+  <button class="cb" id="bBrake">ブレーキ<small>長押し</small></button>
+</div>
+<div id="panel"><div class="card" id="card"></div></div>
+
+<script>
+// ===================== CORE (物理・判定：DOM非依存) =====================
+const CORE = (() => {
+  const ROAD = 260;               // 道路幅（d: 0=左縁石, ROAD=右縁石）
+  const CAR_L = 60, CAR_W = 30;
+  const PARK_D = ROAD - 5 - CAR_W / 2;   // 理想の駐車位置（横）
+  const START_D = PARK_D - 68;           // 走行レーン
+  const SLOT_S = 760;                    // 枠の中心（縦）
+  const PSI_MAX = 0.8;                   // ドリフト時の最大車体角
+  let ASSIST = 3;                        // 枠アシストの強さ
+  const LEVELS = [
+    { ratio: 2.1,  speed: 250, name: 'ゆったり', hint: 590 },
+    { ratio: 1.85, speed: 270, name: 'ふつう', hint: 600 },
+    { ratio: 1.68, speed: 290, name: 'せまい' },
+    { ratio: 1.55, speed: 310, name: 'ギリギリ' },
+    { ratio: 1.45, speed: 330, name: '神業' },
+  ];
+
+  function corners(s, d, h, l, w) {
+    const c = Math.cos(h), n = Math.sin(h), hl = l / 2, hw = w / 2;
+    return [
+      [s + c*hl - n*hw, d + n*hl + c*hw],
+      [s + c*hl + n*hw, d + n*hl - c*hw],
+      [s - c*hl + n*hw, d - n*hl - c*hw],
+      [s - c*hl - n*hw, d - n*hl + c*hw],
+    ];
+  }
+  function overlap(A, B) {
+    for (const P of [A, B]) for (let i = 0; i < 2; i++) {
+      const p = P[i], q = P[i + 1], ax = -(q[1] - p[1]), ay = q[0] - p[0];
+      let a0 = Infinity, a1 = -Infinity, b0 = Infinity, b1 = -Infinity;
+      for (const v of A) { const t = v[0]*ax + v[1]*ay; a0 = Math.min(a0, t); a1 = Math.max(a1, t); }
+      for (const v of B) { const t = v[0]*ax + v[1]*ay; b0 = Math.min(b0, t); b1 = Math.max(b1, t); }
+      if (a1 < b0 || b1 < a0) return false;
+    }
+    return true;
+  }
+  const toward = (a, b, m) => a < b ? Math.min(b, a + m) : Math.max(b, a - m);
+
+  function makeLevel(i) {
+    const lv = LEVELS[i];
+    const len = CAR_L * lv.ratio;
+    const slot = { a: SLOT_S - len / 2, b: SLOT_S + len / 2, c: SLOT_S };
+    const parked = [];
+    for (let s = slot.a - CAR_L / 2 - 2, k = 0; s > -400; s -= CAR_L + 14, k++) parked.push({ s, d: PARK_D, k });
+    for (let s = slot.b + CAR_L / 2 + 2, k = 0; s < SLOT_S + 1400; s += CAR_L + 14, k++) parked.push({ s, d: PARK_D, k: k + 50 });
+    return { lv, slot, parked };
+  }
+  function makeCar(lv) {
+    return { s: 0, d: START_D, v: lv.speed, phi: 0, psi: 0, maxSlip: 0, bumped: false, stillT: 0 };
+  }
+  // 戻り値: null | {type:'crash'} | {type:'stop'}
+  function step(c, world, drift, brake, dt) {
+    const vf = Math.min(1, c.v / 120);
+    if (drift && c.v > 40) {
+      c.psi = toward(c.psi, PSI_MAX, 3.4 * dt);
+      c.phi += (c.psi - c.phi) * Math.min(1, 1.6 * dt);
+      c.v -= 70 * dt;
+    } else {
+      c.psi = toward(c.psi, 0, 3.6 * dt * vf);
+      c.phi += (c.psi - c.phi) * Math.min(1, (brake ? 1.4 : 4.5) * dt);
+    }
+    c.v -= (brake ? 480 : 10) * dt;
+    if (c.v < 0) c.v = 0;
+    c.s += Math.cos(c.phi) * c.v * dt;
+    c.d += Math.sin(c.phi) * c.v * dt;
+
+    // 枠アシスト：枠の中に入ったら、車体をまっすぐ・縁石寄りに吸い寄せる
+    const sl = world.slot;
+    if (!drift && c.s > sl.a && c.s < sl.b && c.d > PARK_D - 40) {
+      const k = Math.min(1, ASSIST * dt);
+      c.psi += (0 - c.psi) * k;
+      c.phi += (0 - c.phi) * k;
+      c.d += (PARK_D - c.d) * k * 0.8;
+    }
+    const slip = Math.abs(c.psi - c.phi) * 180 / Math.PI;
+    if (c.v > 60 && slip > c.maxSlip) c.maxSlip = slip;
+
+    // 縁石：ぶつかっても止まるだけ（減点）
+    let pts = corners(c.s, c.d, c.psi, CAR_L, CAR_W);
+    let maxD = -Infinity, minD = Infinity;
+    for (const p of pts) { maxD = Math.max(maxD, p[1]); minD = Math.min(minD, p[1]); }
+    if (maxD > ROAD) {
+      const hard = Math.sin(c.phi) * c.v > 70;   // ゆっくり寄せた分にはノーカウント
+      c.d -= maxD - ROAD;
+      if (c.phi > 0) { c.phi *= 0.3; c.psi *= 0.6; if (hard) c.v *= 0.85; }
+      if (hard) { c.bumped = true; c.bumpNow = true; }
+    }
+    if (minD < 0) { c.d -= minD; if (c.phi < 0) c.phi = 0; }
+
+    // 駐車車両（当たり判定は少し小さめ＝やさしめ）
+    pts = corners(c.s, c.d, c.psi, CAR_L - 8, CAR_W - 6);
+    for (const p of world.parked) {
+      if (Math.abs(p.s - c.s) > CAR_L * 1.5) continue;
+      if (overlap(pts, corners(p.s, p.d, 0, CAR_L - 2, CAR_W - 2))) return { type: 'crash' };
+    }
+    if (c.v < 3) c.stillT += dt; else c.stillT = 0;
+    if (c.stillT > 0.35) return { type: 'stop' };
+    return null;
+  }
+  function score(c, world) {
+    const { slot } = world;
+    const pts = corners(c.s, c.d, c.psi, CAR_L, CAR_W);
+    const inSlotRough = c.s > slot.a && c.s < slot.b && c.d > PARK_D - 30;
+    if (!inSlotRough) return { ok: false };
+    const fullyIn = pts.every(p => p[0] >= slot.a - 2 && p[0] <= slot.b + 2 && p[1] >= PARK_D - CAR_W / 2 - 10);
+    const ang = Math.abs(c.psi) * 180 / Math.PI;
+    const dd = Math.abs(c.d - PARK_D), ds = Math.abs(c.s - slot.c);
+    const sAngle = Math.max(0, 30 - ang * 2);
+    const sCurb = Math.max(0, 25 - dd * 1.2);
+    const sCenter = Math.max(0, 20 - ds * 0.5);
+    const sDrift = Math.min(15, c.maxSlip / 2);
+    const sClean = c.bumped ? 0 : 10;
+    let total = sAngle + sCurb + sCenter + sDrift + sClean;
+    if (!fullyIn) total *= 0.6;
+    total = Math.round(total);
+    const rank = total >= 90 ? 'S' : total >= 75 ? 'A' : total >= 55 ? 'B' : total >= 35 ? 'C' : 'D';
+    return { ok: true, total, rank, fullyIn, ang, sAngle, sCurb, sCenter, sDrift, sClean };
+  }
+  return { ROAD, CAR_L, CAR_W, PARK_D, START_D, LEVELS, corners, makeLevel, makeCar, step, score };
+})();
+if (typeof module !== 'undefined') module.exports = CORE;
+// ===================== /CORE =====================
+</script>
+<script>
+// ===================== SFX (WebAudioで全部合成・音声ファイルなし) =====================
+const SFX = (() => {
+  let ac = null, master, noiseBuf, eng = null, skid = null, muted = false;
+  try { muted = localStorage.getItem('driftpark2_mute') === '1'; } catch (e) {}
+  function init() {
+    if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    ac = new AC();
+    master = ac.createGain(); master.gain.value = muted ? 0 : 0.55; master.connect(ac.destination);
+    noiseBuf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
+    const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    // エンジン：ノコギリ波2本＋ローパス
+    eng = { g: ac.createGain(), f: ac.createBiquadFilter(), o1: ac.createOscillator(), o2: ac.createOscillator() };
+    eng.o1.type = 'sawtooth'; eng.o2.type = 'square'; eng.o1.frequency.value = 50; eng.o2.frequency.value = 25;
+    eng.f.type = 'lowpass'; eng.f.frequency.value = 500; eng.g.gain.value = 0;
+    const o2g = ac.createGain(); o2g.gain.value = 0.5;
+    eng.o1.connect(eng.f); eng.o2.connect(o2g).connect(eng.f); eng.f.connect(eng.g).connect(master);
+    eng.o1.start(); eng.o2.start();
+    // スキール：ノイズ＋バンドパス
+    skid = { src: ac.createBufferSource(), f: ac.createBiquadFilter(), g: ac.createGain() };
+    skid.src.buffer = noiseBuf; skid.src.loop = true;
+    skid.f.type = 'bandpass'; skid.f.frequency.value = 1700; skid.f.Q.value = 6; skid.g.gain.value = 0;
+    skid.src.connect(skid.f).connect(skid.g).connect(master); skid.src.start();
+  }
+  const t = () => ac.currentTime;
+  function loop(speed, skidAmt, on) {
+    if (!ac) return;
+    const rpm = 45 + speed * 0.32;
+    eng.o1.frequency.setTargetAtTime(rpm, t(), 0.08); eng.o2.frequency.setTargetAtTime(rpm / 2, t(), 0.08);
+    eng.f.frequency.setTargetAtTime(350 + speed * 3, t(), 0.1);
+    eng.g.gain.setTargetAtTime(on ? 0.07 + speed / 3000 : 0, t(), 0.12);
+    skid.g.gain.setTargetAtTime(on ? skidAmt * 0.32 : 0, t(), 0.05);
+    skid.f.frequency.setTargetAtTime(1400 + skidAmt * 900, t(), 0.05);
+  }
+  function tone(freq, dur, type = 'sine', vol = 0.3, to = null, delay = 0) {
+    if (!ac) return;
+    const o = ac.createOscillator(), g = ac.createGain(), s = t() + delay;
+    o.type = type; o.frequency.setValueAtTime(freq, s);
+    if (to) o.frequency.exponentialRampToValueAtTime(to, s + dur);
+    g.gain.setValueAtTime(0.0001, s); g.gain.exponentialRampToValueAtTime(vol, s + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, s + dur);
+    o.connect(g).connect(master); o.start(s); o.stop(s + dur + 0.05);
+  }
+  function noise(dur, freq, vol = 0.4, type = 'lowpass', delay = 0) {
+    if (!ac) return;
+    const src = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain(), s = t() + delay;
+    src.buffer = noiseBuf; f.type = type; f.frequency.value = freq;
+    g.gain.setValueAtTime(vol, s); g.gain.exponentialRampToValueAtTime(0.0001, s + dur);
+    src.connect(f).connect(g).connect(master); src.start(s, Math.random()); src.stop(s + dur + 0.05);
+  }
+  return {
+    init, loop,
+    get muted() { return muted; },
+    toggle() { muted = !muted; try { localStorage.setItem('driftpark2_mute', muted ? '1' : '0'); } catch (e) {}
+      if (master) master.gain.setTargetAtTime(muted ? 0 : 0.55, t(), 0.02); return muted; },
+    beep() { tone(660, 0.14, 'square', 0.12); },
+    go() { tone(990, 0.35, 'square', 0.14); noise(0.5, 400, 0.25); },
+    click() { tone(900, 0.05, 'triangle', 0.12); },
+    driftStart() { noise(0.25, 2400, 0.18, 'bandpass'); },
+    bump() { tone(140, 0.15, 'sine', 0.5, 50); noise(0.1, 600, 0.3); },
+    crash() {
+      noise(0.9, 1200, 0.9); noise(0.4, 4000, 0.4, 'highpass');
+      tone(90, 0.5, 'sine', 0.8, 30);
+      [1800, 2300, 3100].forEach((f, i) => tone(f, 0.25, 'triangle', 0.08, f * 0.7, 0.05 + i * 0.07));
+    },
+    park() { tone(220, 0.12, 'sine', 0.35, 90); noise(0.15, 300, 0.2); },
+    success(rank) {
+      const notes = [523, 659, 784, 1047];
+      notes.forEach((f, i) => tone(f, 0.22, 'triangle', 0.18, null, 0.25 + i * 0.09));
+      if (rank === 'S' || rank === 'A') { tone(1319, 0.5, 'triangle', 0.16, null, 0.25 + 4 * 0.09); tone(1568, 0.6, 'sine', 0.1, null, 0.25 + 5 * 0.09); }
+    },
+    stamp() { tone(110, 0.18, 'sine', 0.6, 45); noise(0.12, 900, 0.3); },
+    fail() { [392, 330, 262].forEach((f, i) => tone(f, 0.26, 'triangle', 0.15, null, i * 0.16)); },
+  };
+})();
+</script>
+<script>
+(() => {
+'use strict';
+const { ROAD, CAR_L, CAR_W, LEVELS } = CORE;
+const SIDE = 46;                   // 歩道の幅
+const VW = ROAD + SIDE * 2;        // 表示上の横幅（ワールド単位）
+const DT = 1 / 120;
+
+// ---------- canvas ----------
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+const gameEl = document.getElementById('game');
+let scale = 1, dpr = 1, viewH = 600;
+function resize() {
+  dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const r = gameEl.getBoundingClientRect();
+  const w = Math.min(r.width, r.height * 0.75);
+  scale = w / VW;
+  viewH = r.height / scale;
+  cv.style.width = w + 'px'; cv.style.height = r.height + 'px';
+  cv.width = Math.round(w * dpr); cv.height = Math.round(r.height * dpr);
+}
+window.addEventListener('resize', resize);
+resize();
+
+// ---------- storage ----------
+let best = {};
+try { best = JSON.parse(localStorage.getItem('driftpark2_best') || '{}') || {}; } catch (e) {}
+const saveBest = () => { try { localStorage.setItem('driftpark2_best', JSON.stringify(best)); } catch (e) {} };
+
+// ---------- input（2ボタン） ----------
+const input = { drift: false, brake: false };
+function bindBtn(el, key) {
+  const on = e => { e.preventDefault(); input[key] = true; el.classList.add('on'); };
+  const off = e => { e.preventDefault(); input[key] = false; el.classList.remove('on'); };
+  el.addEventListener('pointerdown', on);
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(t => el.addEventListener(t, off));
+  el.addEventListener('contextmenu', e => e.preventDefault());
+}
+const bDrift = document.getElementById('bDrift'), bBrake = document.getElementById('bBrake');
+bindBtn(bDrift, 'drift'); bindBtn(bBrake, 'brake');
+const KEYS = { Space: 'drift', ArrowLeft: 'drift', KeyZ: 'drift', ArrowDown: 'brake', ArrowRight: 'brake', KeyX: 'brake' };
+window.addEventListener('keydown', e => {
+  const k = KEYS[e.code];
+  if (k) { e.preventDefault(); input[k] = true; (k === 'drift' ? bDrift : bBrake).classList.add('on'); }
+  if (e.code === 'KeyR' && state !== 'title') startLevel(levelIdx);
+  if (e.code === 'Enter' && primaryAction) primaryAction();
+});
+window.addEventListener('keyup', e => {
+  const k = KEYS[e.code];
+  if (k) { e.preventDefault(); input[k] = false; (k === 'drift' ? bDrift : bBrake).classList.remove('on'); }
+});
+window.addEventListener('blur', () => { input.drift = input.brake = false; bDrift.classList.remove('on'); bBrake.classList.remove('on'); });
+// 音はユーザー操作のあとでないと鳴らせないので、最初の操作で初期化
+['pointerdown', 'keydown'].forEach(t => window.addEventListener(t, () => SFX.init(), { capture: true }));
+const muteBtn = document.getElementById('mute');
+const muteIcon = () => muteBtn.textContent = SFX.muted ? '🔇' : '🔊';
+muteIcon();
+muteBtn.addEventListener('click', e => { e.stopPropagation(); SFX.toggle(); muteIcon(); });
+document.addEventListener('click', e => { if (e.target.closest('button.b')) SFX.click(); });
+
+// ---------- game ----------
+let state = 'title', levelIdx = 0, world, car, acc = 0, particles = [], skids = [], prevRear = null, primaryAction = null, shake = 0;
+let simT = 0;
+// QA用：URLに ?qa を付けたときだけ、ゲームの状態を読めるようにする
+if (/[?&]qa\b/.test(location.search)) window.__dp = { get car() { return car; }, get state() { return state; }, get simT() { return simT; }, get timeScale() { return timeScale; } };
+let floats = [], confetti = [], timeScale = 1, zoom = 1, countT = 0, countN = 0, wasDrifting = false, hitStop = 0, driftPeak = 0;
+const COLORS = ['#4a78c2', '#e8e8e8', '#2b2f36', '#7a8b5a', '#c9a24a', '#8b4a7a', '#5aa0a8', '#9aa0a8'];
+
+function startLevel(i) {
+  levelIdx = i;
+  world = CORE.makeLevel(i);
+  world.parked.forEach(p => p.col = COLORS[(p.k * 3 + i) % COLORS.length]);
+  car = CORE.makeCar(world.lv);
+  car.v = 0;
+  particles = []; skids = []; prevRear = null; acc = 0; floats = []; confetti = [];
+  timeScale = 1; zoom = 1; wasDrifting = false; hitStop = 0; driftPeak = 0;
+  state = 'count'; countT = 0; countN = 3;
+  hidePanel();
+  flash('3', 900); SFX.beep();
+}
+const msgEl = document.getElementById('msg');
+let msgTimer;
+function flash(t, ms = 700, color) {
+  msgEl.textContent = t; msgEl.style.color = color || ''; msgEl.style.opacity = 1;
+  msgEl.classList.remove('pop'); void msgEl.offsetWidth; msgEl.classList.add('pop');
+  clearTimeout(msgTimer); msgTimer = setTimeout(() => msgEl.style.opacity = 0, ms);
+}
+const flashEl = document.getElementById('flash');
+function screenFlash(color) { flashEl.style.background = color; flashEl.classList.remove('go'); void flashEl.offsetWidth; flashEl.classList.add('go'); }
+
+function update(dt) {
+  if (state === 'count') {
+    countT += dt;
+    if (countT >= 0.6) {
+      countT = 0; countN--;
+      if (countN > 0) { flash(String(countN), 900); SFX.beep(); }
+      else {
+        flash('GO!', 700); SFX.go(); state = 'play'; car.v = world.lv.speed;
+        for (let i = 0; i < 14; i++) particles.push({ s: car.s - 30, d: car.d + (Math.random() - .5) * 16, vs: -40 - Math.random() * 60, vd: (Math.random() - .5) * 40, r: 5, life: 1 });
+      }
+    }
+    SFX.loop(0, 0, true);
+    return;
+  }
+  if (state !== 'play') { SFX.loop(0, 0, false); return; }
+  if (hitStop > 0) { hitStop -= dt; return; }
+
+  // スロー演出：枠の中でブレーキ中は時間がゆっくりになる
+  const sl = world.slot;
+  const inSlot = car.s > sl.a - 20 && car.s < sl.b && car.d > CORE.PARK_D - 45;
+  const slowTarget = inSlot && car.v < 230 && car.v > 4 ? 0.45 : 1;
+  timeScale += (slowTarget - timeScale) * Math.min(1, dt * 8);
+  zoom += ((slowTarget < 1 ? 1.3 : 1) - zoom) * Math.min(1, dt * 4);
+
+  acc += dt * timeScale;
+  while (acc >= DT && state === 'play') {
+    acc -= DT;
+    simT += DT;
+    car.bumpNow = false;
+    const r = CORE.step(car, world, input.drift, input.brake, DT);
+    if (car.bumpNow && car.v > 30) { shake = Math.max(shake, 4); SFX.bump(); vib(30); floats.push({ s: car.s, d: car.d + 30, text: 'ゴツッ', col: '#ff8a4f', life: 1 }); }
+    effects();
+    if (r && r.type === 'crash') return onCrash();
+    if (r && r.type === 'stop') return onStop();
+  }
+  // ドリフト開始の手応え
+  const drifting = input.drift && car.v > 40;
+  if (drifting && !wasDrifting) { SFX.driftStart(); vib(15); }
+  wasDrifting = drifting;
+  // ドリフト角の表示
+  const slipDeg = Math.abs(car.psi - car.phi) * 180 / Math.PI;
+  if (slipDeg > 12 && car.v > 60) driftPeak = Math.max(driftPeak, slipDeg);
+  else if (driftPeak > 0) {
+    floats.push({ s: car.s, d: car.d - 70, text: `DRIFT ${Math.round(driftPeak)}°`, col: driftPeak > 30 ? '#ffcc33' : '#ff8a4f', life: 1.2, big: driftPeak > 30 });
+    driftPeak = 0;
+  }
+  const skidAmt = car.v > 30 ? Math.min(1, slipDeg / 25 + (input.brake ? 0.5 : 0)) * Math.min(1, car.v / 150) : 0;
+  SFX.loop(car.v, skidAmt, true);
+}
+function effects() {
+  const c = car, fs = Math.cos(c.psi), fd = Math.sin(c.psi);
+  const rear = [-1, 1].map(k => [c.s - fs * 18 - fd * k * 11, c.d - fd * 18 + fs * k * 11]);
+  const slip = Math.abs(c.psi - c.phi);
+  const skidding = c.v > 30 && (slip > 0.08 || input.brake);
+  if (skidding && prevRear) {
+    skids.push([prevRear[0], rear[0]], [prevRear[1], rear[1]]);
+    if (skids.length > 3000) skids.splice(0, 400);
+    const n = slip > 0.25 ? 0.6 : 0.3;
+    if (Math.random() < n) for (const p of rear) particles.push({ s: p[0], d: p[1], vs: (Math.random() - .5) * 30, vd: (Math.random() - .5) * 30, r: 6, life: 1 });
+  }
+  prevRear = rear;
+}
+function vib(ms) {
+  try {
+    const ua = navigator.userActivation;
+    if (navigator.vibrate && (!ua || ua.hasBeenActive)) navigator.vibrate(ms);
+  } catch (e) {}
+}
+function onCrash() {
+  state = 'over'; shake = 14; vib([80, 40, 80]);
+  SFX.crash(); screenFlash('#ff3b30');
+  for (let i = 0; i < 40; i++) particles.push({ s: car.s, d: car.d, vs: (Math.random() - .5) * 260, vd: (Math.random() - .5) * 260, r: 3, life: 1, spark: true });
+  for (let i = 0; i < 10; i++) particles.push({ s: car.s, d: car.d, vs: (Math.random() - .5) * 60, vd: (Math.random() - .5) * 60, r: 10, life: 1.4 });
+  floats.push({ s: car.s, d: car.d - 40, text: 'CRASH!', col: '#ff5a4f', life: 1.4, big: true });
+  car.v = 0; timeScale = 1;
+  setTimeout(() => { SFX.fail(); showFail('ガシャーン！', '駐車中の車にぶつかった…<br>ドリフトを始めるタイミングを変えてみよう'); }, 800);
+}
+function onStop() {
+  state = 'over';
+  const r = CORE.score(car, world);
+  if (!r.ok) {
+    const early = car.s < world.slot.a;
+    return setTimeout(() => { SFX.fail(); showFail('駐車失敗', early ? '手前で止まっちゃった。<br>ブレーキをもう少し遅く！' : (car.s > world.slot.b ? '行き過ぎ！ブレーキを早めに。' : '枠まで寄せきれなかった。<br>ドリフトを長めに押してみよう')); }, 300);
+  }
+  vib([20, 30, 60]);
+  SFX.park(); SFX.success(r.rank); screenFlash('#fff');
+  shake = 3;
+  floats.push({ s: car.s + 30, d: car.d - 60, text: r.rank === 'S' ? 'PERFECT!!' : 'PARKED!', col: '#ffcc33', life: 1.6, big: true });
+  spawnConfetti(r.rank === 'S' ? 140 : r.rank === 'A' ? 90 : 50);
+  const key = 'lv' + levelIdx, isBest = best[key] == null || r.total > best[key];
+  if (isBest) { best[key] = r.total; saveBest(); }
+  setTimeout(() => showResult(r, isBest), 900);
+}
+function spawnConfetti(n) {
+  const cols = ['#ffcc33', '#ff5a4f', '#4fc3ff', '#7dff8a', '#ff8adf', '#fff'];
+  for (let i = 0; i < n; i++) confetti.push({
+    x: VW / 2 + (Math.random() - .5) * 60, y: viewH * 0.45,
+    vx: (Math.random() - .5) * 420, vy: -200 - Math.random() * 380, rot: Math.random() * 6, vr: (Math.random() - .5) * 14,
+    w: 4 + Math.random() * 5, h: 6 + Math.random() * 6, col: cols[i % cols.length], life: 2.6 + Math.random(),
+  });
+}
+
+// ---------- panels ----------
+const panel = document.getElementById('panel'), card = document.getElementById('card');
+function hidePanel() { panel.classList.add('hide'); primaryAction = null; }
+function showPanel(html, primary) {
+  card.innerHTML = html; panel.classList.remove('hide'); primaryAction = primary;
+  card.classList.remove('in'); void card.offsetWidth; card.classList.add('in');
+}
+function unlocked(i) { return i === 0 || best['lv' + (i - 1)] != null; }
+function showTitle() {
+  state = 'title';
+  const lvs = LEVELS.map((l, i) => `<button class="b ${i === nextPlayable() ? '' : 'sec'}" data-lv="${i}" ${unlocked(i) ? '' : 'disabled'}>
+      LV${i + 1} ${l.name}<small>${best['lv' + i] != null ? 'BEST ' + best['lv' + i] : unlocked(i) ? '未クリア' : '🔒'}</small></button>`).join('');
+  showPanel(`<h1>ドリフト縦列駐車</h1>
+    <p class="lead">ドリフトで車を制御せよ！2つのボタンで黄色い枠に縦列駐車！</p>
+    <div class="how">① 枠が近づいたら<b class="d">ドリフト</b>を長押し → 車が右へ滑る<br>② 離したらすぐ<b class="b">ブレーキ</b>を長押し<br>③ 枠の中で止まれば成功！</div>
+    <div class="lv">${lvs}</div>`, () => startLevel(nextPlayable()));
+  card.querySelectorAll('[data-lv]').forEach(b => b.onclick = () => startLevel(+b.dataset.lv));
+  fitLead();
+}
+// 説明文を1行に収める：はみ出すぶんだけ文字を小さくする
+function fitLead() {
+  const el = card.querySelector('.lead');
+  if (!el) return;
+  el.style.fontSize = '';
+  let size = parseFloat(getComputedStyle(el).fontSize);
+  while (el.scrollWidth > el.clientWidth && size > 9) { size -= 0.5; el.style.fontSize = size + 'px'; }
+}
+window.addEventListener('resize', () => { if (state === 'title') fitLead(); });
+function nextPlayable() { for (let i = 0; i < LEVELS.length; i++) if (best['lv' + i] == null) return unlocked(i) ? i : 0; return 0; }
+function showFail(title, sub) {
+  showPanel(`<h2 style="color:var(--danger)">${title}</h2><p>${sub}</p>
+    <div class="btns"><button class="b" id="pRetry">もう一回</button><button class="b sec" id="pMenu">レベル選択</button></div>`, () => startLevel(levelIdx));
+  document.getElementById('pRetry').onclick = () => startLevel(levelIdx);
+  document.getElementById('pMenu').onclick = showTitle;
+}
+function showResult(r, isBest) {
+  const hasNext = levelIdx < LEVELS.length - 1;
+  showPanel(`<h2>駐車成功！${isBest ? ' <span style="color:var(--accent);font-size:15px">NEW BEST</span>' : ''}</h2>
+    <div class="rank" id="pRank" style="visibility:hidden">${r.rank}</div><div style="font-size:22px;font-weight:800"><span id="pScore">0</span> 点</div>
+    <div class="rows">
+      <div><span>まっすぐ度（${r.ang.toFixed(0)}°ズレ）</span><b>${r.sAngle.toFixed(0)}/30</b></div>
+      <div><span>縁石への寄せ</span><b>${r.sCurb.toFixed(0)}/25</b></div>
+      <div><span>前後の真ん中</span><b>${r.sCenter.toFixed(0)}/20</b></div>
+      <div><span>ドリフト（${car.maxSlip.toFixed(0)}°）</span><b>${r.sDrift.toFixed(0)}/15</b></div>
+      <div><span>縁石ノータッチ</span><b>${r.sClean}/10</b></div>
+      ${r.fullyIn ? '' : '<div style="color:var(--danger)"><span>枠からはみ出し</span><b>×0.6</b></div>'}
+    </div>
+    <div class="btns">${hasNext ? '<button class="b" id="pNext">次のレベル</button>' : ''}
+      <button class="b ${hasNext ? 'sec' : ''}" id="pRetry">もう一回</button><button class="b sec" id="pMenu">レベル選択</button></div>`,
+    () => hasNext ? startLevel(levelIdx + 1) : startLevel(levelIdx));
+  if (hasNext) document.getElementById('pNext').onclick = () => startLevel(levelIdx + 1);
+  document.getElementById('pRetry').onclick = () => startLevel(levelIdx);
+  document.getElementById('pMenu').onclick = showTitle;
+  // 内訳を順に表示 → 点数カウントアップ → ランクのハンコ
+  card.querySelectorAll('.rows div').forEach((el, i) => el.style.animationDelay = (0.1 + i * 0.09) + 's');
+  const scoreEl = document.getElementById('pScore'), rankEl = document.getElementById('pRank');
+  const t0 = performance.now() + 250, dur = 700;
+  let lastShown = -1;
+  (function tick(now) {
+    if (!document.body.contains(scoreEl)) return;
+    const k = Math.max(0, Math.min(1, (now - t0) / dur));
+    const v = Math.round(r.total * (1 - Math.pow(1 - k, 3)));
+    if (v !== lastShown) { scoreEl.textContent = v; if (v % 4 === 0 && v > 0) SFX.click(); lastShown = v; }
+    if (k < 1) requestAnimationFrame(tick);
+    else { rankEl.style.visibility = 'visible'; rankEl.classList.add('stamp'); SFX.stamp(); vib(25); }
+  })(performance.now());
+}
+
+// ---------- render ----------
+// ワールド(s:進行方向, d:横) → 画面(x右, y下)。車は画面下寄りを上へ進む
+let camS = 0;
+const X = d => SIDE + d;
+const Y = s => viewH * 0.72 - (s - camS);
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+function drawCar(s, d, psi, col, player) {
+  ctx.save();
+  ctx.translate(X(d), Y(s)); ctx.rotate(psi);   // 画面上でノーズは上向き、psi>0で右へ
+  const l = CAR_L, w = CAR_W;
+  ctx.fillStyle = 'rgba(0,0,0,.35)'; roundRect(-w / 2 + 3, -l / 2 + 4, w, l, 7); ctx.fill();
+  ctx.fillStyle = '#111';
+  for (const sy of [-18, 18]) for (const sx of [-1, 1]) ctx.fillRect(sx * (w / 2 - 1) - 2.5, sy - 6, 5, 12);
+  ctx.fillStyle = col; roundRect(-w / 2, -l / 2, w, l, 7); ctx.fill();
+  ctx.fillStyle = 'rgba(20,30,45,.88)';
+  roundRect(-w / 2 + 4, -l / 2 + 13, w - 8, 10, 2); ctx.fill();
+  roundRect(-w / 2 + 5, l / 2 - 15, w - 10, 7, 2); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,.13)'; roundRect(-w / 2 + 4, -l / 2 + 24, w - 8, 14, 2); ctx.fill();
+  ctx.fillStyle = '#fff6c8'; ctx.fillRect(-w / 2 + 2, -l / 2, 6, 3); ctx.fillRect(w / 2 - 8, -l / 2, 6, 3);
+  ctx.fillStyle = player && input.brake ? '#ff3b30' : '#7a1d18';
+  ctx.fillRect(-w / 2 + 2, l / 2 - 3, 6, 3); ctx.fillRect(w / 2 - 8, l / 2 - 3, 6, 3);
+  if (player) { ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.fillRect(-2, -l / 2 + 3, 4, l - 8); }
+  ctx.restore();
+}
+function render() {
+  ctx.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0);
+  if (car) camS += (car.s - camS) * 0.2;
+  if (shake > 0) { ctx.translate((Math.random() - .5) * shake, (Math.random() - .5) * shake); shake *= 0.88; if (shake < 0.3) shake = 0; }
+  if (car && zoom > 1.001) {   // 決めの瞬間は車にズーム
+    const cx = X(car.d), cy = Y(car.s);
+    ctx.translate(cx, cy); ctx.scale(zoom, zoom); ctx.translate(-cx, -cy);
+  }
+  const top = camS - viewH * 0.3 - 40, bot = camS + viewH;
+  // 歩道
+  ctx.fillStyle = '#8d8a82'; ctx.fillRect(-20, -20, VW + 40, viewH + 40);
+  ctx.strokeStyle = 'rgba(0,0,0,.13)'; ctx.lineWidth = 1;
+  const off = ((camS % 32) + 32) % 32;
+  for (let y = -32 + off; y < viewH + 32; y += 32) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(SIDE, y); ctx.moveTo(X(ROAD), y); ctx.lineTo(VW, y); ctx.stroke(); }
+  // 道路
+  ctx.fillStyle = '#3a3c40'; ctx.fillRect(X(0), -20, ROAD, viewH + 40);
+  ctx.fillStyle = '#d9d6cc'; ctx.fillRect(X(0) - 5, -20, 5, viewH + 40); ctx.fillRect(X(ROAD), -20, 5, viewH + 40);
+  // 駐車帯ライン
+  ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 2;
+  const laneX = X(CORE.PARK_D - CAR_W / 2 - 8);
+  ctx.beginPath(); ctx.moveTo(laneX, -20); ctx.lineTo(laneX, viewH + 20); ctx.stroke();
+  // センターライン
+  ctx.strokeStyle = '#e8c547'; ctx.lineWidth = 3; ctx.setLineDash([26, 22]); ctx.lineDashOffset = -camS;
+  ctx.beginPath(); ctx.moveTo(X(ROAD * 0.36), -20); ctx.lineTo(X(ROAD * 0.36), viewH + 20); ctx.stroke();
+  ctx.setLineDash([]); ctx.lineDashOffset = 0;
+  // 木
+  for (let s = Math.floor(top / 150) * 150; s < bot + 150; s += 150) {
+    for (const x of [SIDE / 2, X(ROAD) + SIDE / 2 + 2]) {
+      ctx.fillStyle = '#3f6b3a'; ctx.beginPath(); ctx.arc(x, Y(s), 17, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#4f8248'; ctx.beginPath(); ctx.arc(x - 4, Y(s) - 4, 9, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  if (!world) return;
+  // 駐車枠
+  const sl = world.slot, glow = 0.5 + 0.5 * Math.sin(performance.now() / 250);
+  const fx = laneX, fw = X(ROAD) - laneX;
+  ctx.fillStyle = `rgba(255,204,51,${0.12 + glow * 0.15})`; ctx.fillRect(fx, Y(sl.b), fw, sl.b - sl.a);
+  ctx.strokeStyle = '#ffcc33'; ctx.lineWidth = 2.5; ctx.setLineDash([8, 6]); ctx.strokeRect(fx, Y(sl.b), fw, sl.b - sl.a); ctx.setLineDash([]);
+  ctx.fillStyle = '#ffcc33'; ctx.font = 'bold 20px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('P', fx - 18, Y(sl.c));
+  // ドリフト開始の目安（LV1・2のみ）
+  if (world.lv.hint) {
+    const hy = Y(world.lv.hint), hx = X(CORE.START_D);
+    ctx.strokeStyle = 'rgba(255,138,79,.85)'; ctx.lineWidth = 4;
+    for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.moveTo(hx - 16, hy + 10 + i * 12); ctx.lineTo(hx, hy - 2 + i * 12); ctx.lineTo(hx + 16, hy + 10 + i * 12); ctx.stroke(); }
+    ctx.fillStyle = '#ff8a4f'; ctx.font = 'bold 13px system-ui'; ctx.textAlign = 'center';
+    ctx.fillText('ここでドリフト', hx - 70, hy + 14);
+  }
+  // タイヤ痕
+  ctx.strokeStyle = 'rgba(12,12,12,.5)'; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.beginPath();
+  for (const [a, b] of skids) { if (a[0] < top || a[0] > bot) continue; ctx.moveTo(X(a[1]), Y(a[0])); ctx.lineTo(X(b[1]), Y(b[0])); }
+  ctx.stroke();
+  for (const p of world.parked) if (p.s > top - 60 && p.s < bot + 60) drawCar(p.s, p.d, 0, p.col, false);
+  drawCar(car.s, car.d, car.psi, '#e0322b', true);
+  for (const p of particles) {
+    if (p.spark) { ctx.fillStyle = `rgba(255,200,80,${p.life})`; ctx.fillRect(X(p.d), Y(p.s), 3, 3); }
+    else { ctx.fillStyle = `rgba(225,225,225,${p.life * 0.35})`; ctx.beginPath(); ctx.arc(X(p.d), Y(p.s), p.r, 0, Math.PI * 2); ctx.fill(); }
+  }
+  // 浮かぶ文字（DRIFT 35° など）
+  for (const f of floats) {
+    const a = Math.min(1, f.life * 1.5), sc = f.big ? 1 + Math.max(0, f.life - 1) * 1.5 : 1;
+    ctx.save(); ctx.translate(X(f.d), Y(f.s)); ctx.scale(sc, sc);
+    ctx.globalAlpha = a; ctx.font = `900 ${f.big ? 26 : 17}px system-ui`; ctx.textAlign = 'center';
+    ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,.7)'; ctx.strokeText(f.text, 0, 0);
+    ctx.fillStyle = f.col; ctx.fillText(f.text, 0, 0);
+    ctx.restore();
+  }
+  // ---- ここから画面座標 ----
+  ctx.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0);
+  // スピード線
+  if (state === 'play' && car.v > 150) {
+    const a = Math.min(0.35, (car.v - 150) / 500);
+    ctx.strokeStyle = `rgba(255,255,255,${a})`; ctx.lineWidth = 2;
+    const t = performance.now() / 1000;
+    for (let i = 0; i < 10; i++) {
+      const x = (i % 2 ? 6 + (i * 7) % 30 : VW - 6 - (i * 11) % 30);
+      const y = ((t * car.v * 1.6 + i * 97) % (viewH + 80)) - 40;
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + 30 + car.v / 12); ctx.stroke();
+    }
+  }
+  // スロー中の周辺暗転
+  if (zoom > 1.02) {
+    const k = (zoom - 1) / 0.3;
+    const g = ctx.createRadialGradient(VW / 2, viewH * 0.6, viewH * 0.2, VW / 2, viewH * 0.6, viewH * 0.75);
+    g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, `rgba(0,0,0,${0.45 * k})`);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, VW, viewH);
+  }
+  // 紙吹雪
+  for (const c of confetti) {
+    ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(c.rot); ctx.globalAlpha = Math.min(1, c.life);
+    ctx.fillStyle = c.col; ctx.fillRect(-c.w / 2, -c.h / 2 * Math.abs(Math.cos(c.rot * 2)), c.w, c.h * Math.abs(Math.cos(c.rot * 2)) + 1);
+    ctx.restore();
+  }
+  // 枠までの距離ガイド
+  const dist = sl.c - car.s;
+  if (state === 'play' && dist > viewH * 0.7) {
+    ctx.fillStyle = 'rgba(255,204,51,.9)'; ctx.font = 'bold 14px system-ui'; ctx.textAlign = 'center';
+    ctx.fillText(`▲ P まで ${Math.round(dist / 10)}m`, VW / 2, 50);
+  }
+}
+
+// ---------- HUD ----------
+const hLevel = document.getElementById('hLevel'), hSpeed = document.getElementById('hSpeed');
+function hud() {
+  hLevel.textContent = `LV${levelIdx + 1} ${LEVELS[levelIdx].name}`;
+  hSpeed.textContent = car ? `${Math.round(car.v / 6)} km/h` : '';
+}
+
+// ---------- loop ----------
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  update(dt);
+  const pdt = dt * timeScale;
+  for (const p of particles) { p.s += p.vs * pdt; p.d += p.vd * pdt; p.r += 16 * pdt; p.life -= pdt * (p.spark ? 1.8 : 1.0); }
+  particles = particles.filter(p => p.life > 0);
+  for (const f of floats) { f.s += 40 * dt; f.life -= dt; }
+  floats = floats.filter(f => f.life > 0);
+  for (const c of confetti) { c.vy += 600 * dt; c.vx *= 1 - dt * 1.5; c.vy *= 1 - dt * 1.2; c.x += c.vx * dt; c.y += c.vy * dt; c.rot += c.vr * dt; c.life -= dt; }
+  confetti = confetti.filter(c => c.life > 0 && c.y < viewH + 20);
+  if (state !== 'play') { timeScale += (1 - timeScale) * Math.min(1, dt * 4); zoom += (1 - zoom) * Math.min(1, dt * 3); }
+  render(); hud();
+  requestAnimationFrame(frame);
+}
+// タイトル背景用にレベル1を配置しておく
+world = CORE.makeLevel(0); world.parked.forEach(p => p.col = COLORS[(p.k * 3) % COLORS.length]);
+car = CORE.makeCar(world.lv); car.v = 0;
+showTitle();
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

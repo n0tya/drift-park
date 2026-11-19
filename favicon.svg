@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="12" fill="#3a3c40"/>
+  <rect x="50" y="0" width="14" height="64" fill="#8d8a82"/>
+  <rect x="35" y="18" width="14" height="30" fill="#ffcc33" fill-opacity=".25" stroke="#ffcc33" stroke-width="2" stroke-dasharray="4 3"/>
+  <path d="M16 64 Q17 52 30 42" stroke="#111" stroke-opacity=".6" stroke-width="3" fill="none"/>
+  <rect x="36.5" y="19.5" width="11" height="27" rx="3" fill="#e0322b"/>
+  <rect x="38" y="24" width="8" height="4" rx="1" fill="#14202d"/>
+  <rect x="41.2" y="20.5" width="1.6" height="24" fill="#fff" fill-opacity=".85"/>
+  <text x="17" y="30" font-family="Arial,sans-serif" font-weight="900" font-size="22" fill="#ffcc33" text-anchor="middle">P</text>
+</svg>
